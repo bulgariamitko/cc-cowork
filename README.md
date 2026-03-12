@@ -12,19 +12,19 @@ Share Claude Code sessions with collaborators via encrypted one-time codes. No s
 Session shared! (42 messages)
 Send this to your collaborator (one-time use, deleted after import):
 
-/share cCw_a1b2c3d4e5f6...
+npx cc-cowork cCw_a1b2c3d4e5f6...
 ```
 
-**User B** runs one command in terminal — session imports and Claude Code launches automatically:
+**User B** pastes that command in terminal — everything happens automatically:
 ```bash
-cc-join cCw_a1b2c3d4e5f6...
+npx cc-cowork cCw_a1b2c3d4e5f6...
 ```
 ```
 Session imported! (42 messages)
 Launching Claude Code...
 ```
 
-User B is now inside Claude Code with the full conversation context — ready to continue.
+That's it. User B is inside Claude Code with the full conversation — ready to continue where User A left off.
 
 ## Security
 
@@ -40,34 +40,35 @@ User B is now inside Claude Code with the full conversation context — ready to
 - [GitHub CLI (`gh`)](https://cli.github.com/) installed and authenticated (`gh auth login`)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed
 
-## Install
+## Joining a shared session
+
+Your collaborator sends you a command. Paste it in your terminal:
 
 ```bash
-npm install -g cc-cowork
+npx cc-cowork cCw_a1b2c3d4e5f6...
 ```
 
-This gives you two commands:
+No install needed — `npx` downloads and runs it automatically. The session imports, Claude Code launches, done.
 
-| Command | What it does |
-|---|---|
-| `cc-cowork-install` | Installs the `/share` skill into Claude Code |
-| `cc-join <code>` | Imports a shared session and launches Claude Code |
-
-### Set up the `/share` command
-
-After installing the npm package, run:
+Optionally specify a project directory (defaults to current directory):
 
 ```bash
-cc-cowork-install
+npx cc-cowork cCw_a1b2c3d4e5f6... ~/my-project
 ```
 
-Then **restart Claude Code**. The `/share` slash command is now available in all your sessions.
+## Setting up `/share` (for sharing your own sessions)
 
-### What gets installed where
+If you want to share sessions yourself, install the `/share` skill into Claude Code:
 
-The npm package provides the `cc-join` and `cc-cowork-install` CLI commands globally.
+```bash
+npx cc-cowork --install
+```
 
-`cc-cowork-install` copies the skill files into Claude Code's skills directory:
+Then **restart Claude Code**. Now you can type `/share` in any session to generate a share code.
+
+### What gets installed
+
+The `/share` skill is two files copied into Claude Code's skills directory:
 
 ```
 ~/.claude/skills/share/
@@ -77,42 +78,6 @@ The npm package provides the `cc-join` and `cc-cowork-install` CLI commands glob
 ```
 
 Claude Code loads custom slash commands from `~/.claude/skills/`. Each skill is a folder with a `SKILL.md` that tells Claude what to do when the command is invoked.
-
-## Usage
-
-### Sharing a session (User A)
-
-Inside any Claude Code conversation:
-
-```
-/share
-```
-
-You'll get a `cCw_...` code. Send it to your collaborator.
-
-### Joining a session (User B)
-
-Your collaborator doesn't even need the `/share` skill installed. They just need the npm package:
-
-```bash
-cc-join cCw_a1b2c3d4e5f6...
-```
-
-This downloads the session, decrypts it, and launches Claude Code with the full conversation — one command, no extra steps.
-
-Optionally specify a project directory (defaults to current directory):
-
-```bash
-cc-join cCw_a1b2c3d4e5f6... ~/my-project
-```
-
-### Importing inside Claude Code (alternative)
-
-If you prefer, you can also import from within a running Claude Code session:
-
-```
-/share cCw_a1b2c3d4e5f6...
-```
 
 ## What Gets Shared
 
@@ -129,7 +94,6 @@ The encryption key never leaves the share code. GitHub only ever sees encrypted 
 ## Uninstall
 
 ```bash
-npm uninstall -g cc-cowork
 rm -rf ~/.claude/skills/share
 ```
 

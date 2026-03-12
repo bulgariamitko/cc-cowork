@@ -163,7 +163,7 @@ async function doExport(sessionId, projectDir) {
   console.log(`Session shared! (${msgCount} messages)`);
   console.log(`Send this to your collaborator (one-time use, deleted after import):`);
   console.log(``);
-  console.log(`/share ${hash}`);
+  console.log(`npx cc-cowork ${hash}`);
 }
 
 // --- Import ---

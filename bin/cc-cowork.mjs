@@ -1,27 +1,49 @@
 #!/usr/bin/env node
 
-// cc-join: Import a shared Claude Code session and launch it immediately
-// Usage: cc-join <share-code> [project-dir]
+// cc-cowork: Import a shared Claude Code session and launch it, or install the /share skill
+// Usage: npx cc-cowork <share-code> [project-dir]
+//        npx cc-cowork --install
 
 import { execSync, spawn } from 'node:child_process';
+import { mkdirSync, copyFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const shareMjs = join(__dirname, '..', 'skills', 'share', 'scripts', 'share.mjs');
+const skillSrc = join(__dirname, '..', 'skills', 'share');
 
-const hash = process.argv[2];
-const projectDir = resolve(process.argv[3] || '.');
+const arg = process.argv[2];
 
-if (!hash || hash.startsWith('-')) {
-  console.log('cc-join — Import a shared Claude Code session and resume it');
+// --install: copy /share skill into Claude Code
+if (arg === '--install') {
+  const dest = join(homedir(), '.claude', 'skills', 'share');
+  mkdirSync(join(dest, 'scripts'), { recursive: true });
+  copyFileSync(join(skillSrc, 'SKILL.md'), join(dest, 'SKILL.md'));
+  copyFileSync(join(skillSrc, 'scripts', 'share.mjs'), join(dest, 'scripts', 'share.mjs'));
+  console.log('Installed /share skill to ' + dest);
+  console.log('Restart Claude Code to use /share');
+  process.exit(0);
+}
+
+// No args or help
+if (!arg || arg.startsWith('-')) {
+  console.log('cc-cowork — Share Claude Code sessions with collaborators');
   console.log('');
-  console.log('Usage: cc-join <share-code> [project-dir]');
+  console.log('Join a shared session:');
+  console.log('  npx cc-cowork <share-code> [project-dir]');
+  console.log('');
+  console.log('Install /share skill into Claude Code:');
+  console.log('  npx cc-cowork --install');
   console.log('');
   console.log('  share-code   The cCw_... code from your collaborator');
   console.log('  project-dir  Directory to associate the session with (default: current dir)');
   process.exit(1);
 }
+
+const hash = arg;
+const projectDir = resolve(process.argv[3] || '.');
 
 // Check gh CLI
 try {
