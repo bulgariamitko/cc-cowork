@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -94,9 +94,16 @@ function countConversationMessages(lines) {
 }
 
 function resolveProjectDir(projectDir) {
-  // projectDir comes as the raw CLAUDE_PROJECT_DIR value
-  // Session files are at ~/.claude/projects/<projectDir>/<sessionId>.jsonl
-  return join(homedir(), '.claude', 'projects', projectDir);
+  // CLAUDE_PROJECT_DIR can be either:
+  //   - an absolute path like /Users/foo/my-project
+  //   - already encoded like -Users-foo-my-project
+  // Claude Code stores sessions at ~/.claude/projects/-Users-foo-my-project/
+  let encoded = projectDir;
+  if (projectDir.startsWith('/')) {
+    // Convert absolute path: /Users/foo/bar → -Users-foo-bar
+    encoded = projectDir.replace(/\//g, '-');
+  }
+  return join(homedir(), '.claude', 'projects', encoded);
 }
 
 // --- Export ---
@@ -202,6 +209,7 @@ async function doImport(hash, projectDir) {
   // Write as new session JSONL
   const newSessionId = randomUUID();
   const dir = resolveProjectDir(projectDir);
+  mkdirSync(dir, { recursive: true });
   const outFile = join(dir, `${newSessionId}.jsonl`);
 
   // Rewrite sessionId in each line to the new session ID
