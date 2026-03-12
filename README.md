@@ -1,6 +1,6 @@
 # cc-cowork
 
-Share Claude Code sessions with collaborators via encrypted one-time codes. No server needed.
+Share Claude Code sessions + project files with collaborators via encrypted one-time codes. No server needed.
 
 ## How It Works
 
@@ -9,7 +9,7 @@ Share Claude Code sessions with collaborators via encrypted one-time codes. No s
 > /share
 ```
 ```
-Session shared! (42 messages)
+Shared! (42 messages + project files)
 Send this to your collaborator (one-time use, deleted after import):
 
 npx cc-cowork cCw_a1b2c3d4e5f6...
@@ -20,24 +20,23 @@ npx cc-cowork cCw_a1b2c3d4e5f6...
 npx cc-cowork cCw_a1b2c3d4e5f6...
 ```
 ```
-Session imported! (42 messages)
+Session + project imported! (42 messages + project files)
 Launching Claude Code...
 ```
 
-That's it. User B is inside Claude Code with the full conversation — ready to continue where User A left off.
+That's it. User B has the full project files and conversation — ready to continue where User A left off.
 
-## Two Sharing Modes
+## What Gets Shared
 
-| Command | What gets shared |
-|---|---|
-| `/share` | Session only (conversation + tool calls) |
-| `/share --full` | Session + all project files (including hidden files like `.claude/`, `CLAUDE.md`, etc.) |
+Everything:
+- Full conversation history (user + assistant turns, tool calls, results)
+- All project files including hidden files (`.claude/`, `CLAUDE.md`, `.env`, etc.)
 
-Use `--full` when your collaborator needs the actual project files to continue working, not just the conversation context. Import auto-detects which mode was used and extracts files if included.
+The session is filtered to strip noise (progress indicators, file snapshots) and the project is tar'd and bundled together.
 
 ## Security
 
-- **AES-256-GCM encryption** — the session is encrypted locally before it leaves your machine
+- **AES-256-GCM encryption** — everything is encrypted locally before it leaves your machine
 - **The key never touches GitHub** — it's embedded in the share code you send directly to your collaborator
 - **Secret Gist** — not indexed, not searchable, only accessible via direct ID
 - **One-time use** — the Gist is automatically deleted after import
@@ -57,11 +56,9 @@ Your collaborator sends you a command. Paste it in your terminal:
 npx cc-cowork cCw_a1b2c3d4e5f6...
 ```
 
-No install needed — `npx` downloads and runs it automatically. The session imports, Claude Code launches, done.
+No install needed — `npx` downloads and runs it automatically. Project files are extracted to your current directory, Claude Code launches with the full conversation.
 
-If the share included project files (`--full`), they are extracted to your current directory before launching.
-
-Optionally specify a project directory (defaults to current directory):
+Optionally specify a project directory:
 
 ```bash
 npx cc-cowork cCw_a1b2c3d4e5f6... ~/my-project
@@ -69,20 +66,15 @@ npx cc-cowork cCw_a1b2c3d4e5f6... ~/my-project
 
 ## Setting up `/share` (for sharing your own sessions)
 
-If you want to share sessions yourself, install the `/share` skill into Claude Code:
+Install the `/share` skill into Claude Code:
 
 ```bash
 npx cc-cowork --install
 ```
 
-Then **restart Claude Code**. Now you can use:
-
-- `/share` — share session only
-- `/share --full` — share session + all project files
+Then **restart Claude Code**. Now you can type `/share` in any session to share it.
 
 ### What gets installed
-
-The `/share` skill is two files copied into Claude Code's skills directory:
 
 ```
 ~/.claude/skills/share/
@@ -95,9 +87,9 @@ Claude Code loads custom slash commands from `~/.claude/skills/`. Each skill is 
 
 ## How It Works Under the Hood
 
-1. **Export**: Reads the session JSONL, filters noise, encrypts with a random AES-256-GCM key, uploads ciphertext to a secret GitHub Gist. With `--full`, the project directory is tar'd and bundled alongside the session.
+1. **Export**: Tar's the project directory, reads the session JSONL, bundles them together, encrypts with AES-256-GCM, uploads ciphertext to a secret GitHub Gist
 2. **Hash**: The share code (`cCw_...`) encodes the Gist ID + encryption key in base64url — ~68 characters
-3. **Import**: Decodes the hash, downloads from the Gist API, decrypts, writes a new session file, extracts project files if included, deletes the Gist
+3. **Import**: Decodes the hash, downloads from the Gist API, decrypts, extracts project files, writes session file, deletes the Gist
 
 The encryption key never leaves the share code. GitHub only ever sees encrypted data.
 

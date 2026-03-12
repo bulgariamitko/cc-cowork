@@ -163,7 +163,7 @@ function deleteGist(gistId) {
 
 // --- Export ---
 
-async function doExport(sessionId, projectDir, full = false) {
+async function doExport(sessionId, projectDir) {
   const dir = resolveProjectDir(projectDir);
   const sessionFile = join(dir, `${sessionId}.jsonl`);
 
@@ -177,53 +177,40 @@ async function doExport(sessionId, projectDir, full = false) {
   const msgCount = countConversationMessages(filteredLines);
   const sessionData = filteredLines.join('\n');
 
-  let payload;
-  let desc;
-
-  if (full) {
-    // Tar the project directory (all files including hidden)
-    const projectCwd = resolveProjectCwd(projectDir);
-    if (!existsSync(projectCwd)) {
-      console.error(`Project directory not found: ${projectCwd}`);
-      process.exit(1);
-    }
-
-    const tarFile = join(tmpdir(), '.cc-cowork-tar-' + randomUUID() + '.tar.gz');
-    try {
-      execSync(
-        `tar -czf "${tarFile}" -C "${projectCwd}" .`,
-        { stdio: ['pipe', 'pipe', 'pipe'] }
-      );
-    } catch (err) {
-      console.error('Failed to create project archive.');
-      console.error(err.stderr || err.message);
-      process.exit(1);
-    }
-
-    const tarData = readFileSync(tarFile).toString('base64');
-    try { execSync(`rm "${tarFile}"`); } catch { /* ignore */ }
-
-    payload = JSON.stringify({
-      type: 'full',
-      session: sessionData,
-      files: tarData,
-    });
-    desc = 'cc-cowork shared session + project';
-  } else {
-    payload = sessionData;
-    desc = 'cc-cowork shared session';
+  // Tar the project directory (all files including hidden)
+  const projectCwd = resolveProjectCwd(projectDir);
+  if (!existsSync(projectCwd)) {
+    console.error(`Project directory not found: ${projectCwd}`);
+    process.exit(1);
   }
+
+  const tarFile = join(tmpdir(), '.cc-cowork-tar-' + randomUUID() + '.tar.gz');
+  try {
+    execSync(
+      `tar -czf "${tarFile}" -C "${projectCwd}" .`,
+      { stdio: ['pipe', 'pipe', 'pipe'] }
+    );
+  } catch (err) {
+    console.error('Failed to create project archive.');
+    console.error(err.stderr || err.message);
+    process.exit(1);
+  }
+
+  const tarData = readFileSync(tarFile).toString('base64');
+  try { execSync(`rm "${tarFile}"`); } catch { /* ignore */ }
+
+  const payload = JSON.stringify({
+    type: 'full',
+    session: sessionData,
+    files: tarData,
+  });
 
   const key = randomBytes(KEY_BYTES);
   const encrypted = encrypt(payload, key);
-  const gistId = uploadToGist(encrypted, desc);
+  const gistId = uploadToGist(encrypted, 'cc-cowork shared session');
   const hash = buildHash(gistId, key);
 
-  if (full) {
-    console.log(`Session + project shared! (${msgCount} messages + all project files)`);
-  } else {
-    console.log(`Session shared! (${msgCount} messages)`);
-  }
+  console.log(`Shared! (${msgCount} messages + project files)`);
   console.log(`Send this to your collaborator (one-time use, deleted after import):`);
   console.log(``);
   console.log(`npx cc-cowork ${hash}`);
@@ -321,28 +308,20 @@ async function doImport(hash, projectDir) {
 
 // --- Main ---
 
-const args = process.argv.slice(2);
-const command = args[0];
+const [,, command, arg1, arg2] = process.argv;
 
 if (command === 'export') {
-  const full = args.includes('--full');
-  const positional = args.filter(a => a !== 'export' && a !== '--full');
-  const sessionId = positional[0];
-  const projectDir = positional[1];
-  if (!sessionId || !projectDir) {
-    console.error('Usage: share.mjs export [--full] <sessionId> <projectDir>');
+  if (!arg1 || !arg2) {
+    console.error('Usage: share.mjs export <sessionId> <projectDir>');
     process.exit(1);
   }
-  await doExport(sessionId, projectDir, full);
+  await doExport(arg1, arg2);
 } else if (command === 'import') {
-  const positional = args.filter(a => a !== 'import');
-  const hashArg = positional[0];
-  const projectDir = positional[1];
-  if (!hashArg || !projectDir) {
+  if (!arg1 || !arg2) {
     console.error('Usage: share.mjs import <hash> <projectDir>');
     process.exit(1);
   }
-  await doImport(hashArg, projectDir);
+  await doImport(arg1, arg2);
 } else {
   console.error('Usage: share.mjs <export|import> ...');
   process.exit(1);
