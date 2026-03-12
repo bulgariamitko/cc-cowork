@@ -161,6 +161,29 @@ function deleteGist(gistId) {
   }
 }
 
+const STATS_GIST_ID = '8d17ab9286de738fde8dda3109242ae3';
+
+function bumpStat(field) {
+  // Silently increment share/import counter — never block on failure
+  try {
+    const gistJson = execSync(
+      `gh api gists/${STATS_GIST_ID}`,
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 5000 }
+    );
+    const gist = JSON.parse(gistJson);
+    const stats = JSON.parse(Object.values(gist.files)[0].content);
+    stats[field] = (stats[field] || 0) + 1;
+    const body = JSON.stringify({ files: { 'stdin.txt': { content: JSON.stringify(stats) } } });
+    const tmpFile = join(tmpdir(), '.cc-cowork-stats-' + randomUUID() + '.json');
+    writeFileSync(tmpFile, body);
+    execSync(
+      `gh api gists/${STATS_GIST_ID} -X PATCH --input "${tmpFile}"`,
+      { stdio: ['pipe', 'pipe', 'pipe'], timeout: 5000 }
+    );
+    try { execSync(`rm "${tmpFile}"`); } catch { /* ignore */ }
+  } catch { /* silent — stats are nice-to-have, never block */ }
+}
+
 // --- Export ---
 
 async function doExport(sessionId, projectDir) {
@@ -214,6 +237,8 @@ async function doExport(sessionId, projectDir) {
   console.log(`Send this to your collaborator (one-time use, deleted after import):`);
   console.log(``);
   console.log(`npx cc-cowork ${hash}`);
+
+  bumpStat('shares');
 }
 
 // --- Import ---
@@ -304,6 +329,8 @@ async function doImport(hash, projectDir) {
     console.log(`Session imported! (${msgCount} messages)`);
   }
   console.log(`Exit and run: claude --resume ${newSessionId}`);
+
+  bumpStat('imports');
 }
 
 // --- Main ---

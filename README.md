@@ -1,7 +1,8 @@
 # cc-cowork
 
 [![npm version](https://img.shields.io/npm/v/cc-cowork)](https://www.npmjs.com/package/cc-cowork)
-[![Sessions shared](https://img.shields.io/npm/dt/cc-cowork?label=sessions%20shared&color=brightgreen)](https://www.npmjs.com/package/cc-cowork)
+[![Sessions shared](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgist.githubusercontent.com%2Fbulgariamitko%2F8d17ab9286de738fde8dda3109242ae3%2Fraw&query=%24.shares&label=sessions%20shared&color=brightgreen)](https://gist.github.com/bulgariamitko/8d17ab9286de738fde8dda3109242ae3)
+[![Sessions imported](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgist.githubusercontent.com%2Fbulgariamitko%2F8d17ab9286de738fde8dda3109242ae3%2Fraw&query=%24.imports&label=sessions%20imported&color=blue)](https://gist.github.com/bulgariamitko/8d17ab9286de738fde8dda3109242ae3)
 
 Share Claude Code sessions + project files with collaborators via encrypted one-time codes. No server needed.
 
