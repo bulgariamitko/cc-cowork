@@ -1,7 +1,26 @@
 {
   "name": "cc-cowork",
   "version": "1.0.0",
-  "description": "Share Claude Code sessions via /share skill",
+  "description": "Share Claude Code sessions with collaborators via encrypted one-time codes",
   "type": "module",
-  "private": true
+  "bin": {
+    "cc-join": "./bin/cc-join.mjs",
+    "cc-cowork-install": "./bin/cc-cowork-install.mjs"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "session-sharing",
+    "collaboration",
+    "pair-programming"
+  ],
+  "author": "Dimitar Klaturov",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bulgariamitko/cc-cowork.git"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }

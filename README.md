@@ -1,10 +1,10 @@
 # cc-cowork
 
-Share Claude Code sessions with collaborators using a single `/share` command. Sessions are encrypted, uploaded as a secret GitHub Gist, and auto-deleted after import. No server needed.
+Share Claude Code sessions with collaborators via encrypted one-time codes. No server needed.
 
 ## How It Works
 
-**User A** shares their session:
+**User A** shares their session from inside Claude Code:
 ```
 > /share
 ```
@@ -15,27 +15,23 @@ Send this to your collaborator (one-time use, deleted after import):
 /share cCw_a1b2c3d4e5f6...
 ```
 
-**User B** imports the session:
-```
-> /share cCw_a1b2c3d4e5f6...
+**User B** runs one command in terminal — session imports and Claude Code launches automatically:
+```bash
+cc-join cCw_a1b2c3d4e5f6...
 ```
 ```
 Session imported! (42 messages)
-Exit and run: claude --resume abc123-def456
+Launching Claude Code...
 ```
 
-User B exits Claude Code, runs `claude --resume abc123-def456`, and picks up right where User A left off — full conversation context intact.
-
-## What Gets Shared
-
-The session JSONL is filtered to keep only meaningful messages (user + assistant turns, tool calls, results). Progress indicators and file snapshots are stripped to keep it lean.
+User B is now inside Claude Code with the full conversation context — ready to continue.
 
 ## Security
 
-- **AES-256-GCM encryption** — the session is encrypted locally before it ever leaves your machine
+- **AES-256-GCM encryption** — the session is encrypted locally before it leaves your machine
 - **The key never touches GitHub** — it's embedded in the share code you send directly to your collaborator
 - **Secret Gist** — not indexed, not searchable, only accessible via direct ID
-- **One-time use** — the Gist is automatically deleted the moment it's imported
+- **One-time use** — the Gist is automatically deleted after import
 - **No server** — everything runs locally through Node.js and the `gh` CLI
 
 ## Prerequisites
@@ -46,79 +42,94 @@ The session JSONL is filtered to keep only meaningful messages (user + assistant
 
 ## Install
 
-### Option 1: Clone and run install script
-
 ```bash
-git clone https://github.com/bulgariamitko/cc-cowork.git
-cd cc-cowork
-./install.sh
+npm install -g cc-cowork
 ```
 
-### Option 2: Manual install (no clone needed)
+This gives you two commands:
+
+| Command | What it does |
+|---|---|
+| `cc-cowork-install` | Installs the `/share` skill into Claude Code |
+| `cc-join <code>` | Imports a shared session and launches Claude Code |
+
+### Set up the `/share` command
+
+After installing the npm package, run:
 
 ```bash
-mkdir -p ~/.claude/skills/share/scripts
-curl -sL https://raw.githubusercontent.com/bulgariamitko/cc-cowork/main/skills/share/SKILL.md -o ~/.claude/skills/share/SKILL.md
-curl -sL https://raw.githubusercontent.com/bulgariamitko/cc-cowork/main/skills/share/scripts/share.mjs -o ~/.claude/skills/share/scripts/share.mjs
+cc-cowork-install
 ```
 
-### What the install does
+Then **restart Claude Code**. The `/share` slash command is now available in all your sessions.
 
-Claude Code loads custom slash commands from `~/.claude/skills/`. Each skill is a folder containing a `SKILL.md` file that defines the command name, description, and instructions for Claude.
+### What gets installed where
 
-The install copies two files into `~/.claude/skills/share/`:
+The npm package provides the `cc-join` and `cc-cowork-install` CLI commands globally.
+
+`cc-cowork-install` copies the skill files into Claude Code's skills directory:
 
 ```
 ~/.claude/skills/share/
 ├── SKILL.md              # Defines the /share slash command
 └── scripts/
-    └── share.mjs         # Node.js script that handles encryption + Gist upload/download
+    └── share.mjs         # Node.js script (encryption + Gist upload/download)
 ```
 
-- **`SKILL.md`** — tells Claude Code to register `/share` as a slash command. When you type `/share`, Claude reads this file and follows the instructions inside (run the Node.js script with the right arguments).
-- **`share.mjs`** — the actual logic. A single self-contained Node.js script with zero dependencies. Uses built-in `crypto` for AES-256-GCM encryption and the `gh` CLI for Gist operations.
-
-After installing, **restart Claude Code** (exit and reopen) for the `/share` command to appear.
+Claude Code loads custom slash commands from `~/.claude/skills/`. Each skill is a folder with a `SKILL.md` that tells Claude what to do when the command is invoked.
 
 ## Usage
 
-### Share your session
+### Sharing a session (User A)
 
-Inside any Claude Code conversation, type:
+Inside any Claude Code conversation:
 
 ```
 /share
 ```
 
-You'll get a ready-to-paste command like `/share cCw_PcP4dk...`. Send the whole line to your collaborator — they paste it directly into Claude Code.
+You'll get a `cCw_...` code. Send it to your collaborator.
 
-### Import a shared session
+### Joining a session (User B)
 
-Your collaborator opens Claude Code (in any project) and types:
-
-```
-/share cCw_PcP4dkeg8SyeruNrsFwmWuI0jOkTBFUh_RjRQAlZ61tlQeZyNC4B2tUf2X0E4cdG
-```
-
-They'll get a session ID back. Exit Claude Code, then:
+Your collaborator doesn't even need the `/share` skill installed. They just need the npm package:
 
 ```bash
-claude --resume <session-id>
+cc-join cCw_a1b2c3d4e5f6...
 ```
 
-The full conversation loads with all context — they can continue right where you left off.
+This downloads the session, decrypts it, and launches Claude Code with the full conversation — one command, no extra steps.
+
+Optionally specify a project directory (defaults to current directory):
+
+```bash
+cc-join cCw_a1b2c3d4e5f6... ~/my-project
+```
+
+### Importing inside Claude Code (alternative)
+
+If you prefer, you can also import from within a running Claude Code session:
+
+```
+/share cCw_a1b2c3d4e5f6...
+```
+
+## What Gets Shared
+
+The session is filtered to keep only meaningful messages (user + assistant turns, tool calls, results). Progress indicators and file snapshots are stripped to keep it lean.
 
 ## How It Works Under the Hood
 
-1. **Export**: Reads the session JSONL, filters out noise, encrypts with a random AES-256-GCM key, uploads the ciphertext to a secret GitHub Gist
-2. **Hash**: The share code (`cCw_...`) encodes the Gist ID + encryption key in base64url — ~68 characters total
-3. **Import**: Decodes the hash, downloads from the Gist API, decrypts, writes a new session JSONL file, deletes the Gist
+1. **Export**: Reads the session JSONL, filters noise, encrypts with a random AES-256-GCM key, uploads ciphertext to a secret GitHub Gist
+2. **Hash**: The share code (`cCw_...`) encodes the Gist ID + encryption key in base64url — ~68 characters
+3. **Import**: Decodes the hash, downloads from the Gist API, decrypts, writes a new session file, deletes the Gist
 
 The encryption key never leaves the share code. GitHub only ever sees encrypted data.
 
 ## Uninstall
 
 ```bash
+npm uninstall -g cc-cowork
 rm -rf ~/.claude/skills/share
 ```
 
