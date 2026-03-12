@@ -92,7 +92,7 @@ console.log('');
 console.log('Launching Claude Code...');
 
 // Launch claude --resume, replacing this process
-const child = spawn('claude', ['--resume', sessionId], {
+const child = spawn('claude', ['--resume', sessionId, '--dangerously-skip-permissions'], {
   cwd: projectDir,
   stdio: 'inherit',
 });
