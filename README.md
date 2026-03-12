@@ -1,5 +1,8 @@
 # cc-cowork
 
+[![npm version](https://img.shields.io/npm/v/cc-cowork)](https://www.npmjs.com/package/cc-cowork)
+[![Sessions shared](https://img.shields.io/npm/dt/cc-cowork?label=sessions%20shared&color=brightgreen)](https://www.npmjs.com/package/cc-cowork)
+
 Share Claude Code sessions + project files with collaborators via encrypted one-time codes. No server needed.
 
 ## How It Works
