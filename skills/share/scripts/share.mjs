@@ -3,8 +3,8 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
 
 const PREFIX = 'cCw_';
 const GIST_ID_BYTES = 16; // 32 hex chars = 16 bytes
@@ -44,7 +44,6 @@ function decrypt(encoded, key) {
 }
 
 function buildHash(gistId, key) {
-  // gistId is 32 hex chars -> convert to 16 bytes
   const gistIdBytes = Buffer.from(gistId, 'hex');
   const combined = Buffer.concat([gistIdBytes, key]);
   return PREFIX + base64urlEncode(combined);
@@ -72,7 +71,6 @@ function filterMessages(jsonlContent) {
   for (const line of lines) {
     try {
       const msg = JSON.parse(line);
-      // Skip progress and file-history-snapshot messages
       if (msg.type === 'progress' || msg.type === 'file-history-snapshot') continue;
       kept.push(line);
     } catch {
@@ -94,21 +92,78 @@ function countConversationMessages(lines) {
 }
 
 function resolveProjectDir(projectDir) {
-  // CLAUDE_PROJECT_DIR can be either:
-  //   - an absolute path like /Users/foo/my-project
-  //   - already encoded like -Users-foo-my-project
-  // Claude Code stores sessions at ~/.claude/projects/-Users-foo-my-project/
   let encoded = projectDir;
   if (projectDir.startsWith('/')) {
-    // Convert absolute path: /Users/foo/bar → -Users-foo-bar
     encoded = projectDir.replace(/\//g, '-');
   }
   return join(homedir(), '.claude', 'projects', encoded);
 }
 
+function resolveProjectCwd(projectDir) {
+  // Convert encoded project dir back to absolute path, or return as-is if already absolute
+  if (projectDir.startsWith('/')) {
+    return projectDir;
+  }
+  // Encoded format: -Users-foo-bar → /Users/foo/bar
+  return projectDir.replace(/^-/, '/').replace(/-/g, '/');
+}
+
+function uploadToGist(data, desc) {
+  const tmpFile = join(tmpdir(), '.cc-cowork-' + randomUUID());
+  writeFileSync(tmpFile, data);
+
+  let gistUrl;
+  try {
+    gistUrl = execSync(
+      `gh gist create "${tmpFile}" --desc "${desc}" --public=false`,
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+  } catch (err) {
+    try { execSync(`rm "${tmpFile}"`); } catch { /* ignore */ }
+    console.error('Failed to create gist. Is `gh` CLI installed and authenticated?');
+    console.error(err.stderr || err.message);
+    process.exit(1);
+  }
+
+  try { execSync(`rm "${tmpFile}"`); } catch { /* ignore */ }
+
+  const gistId = gistUrl.split('/').pop();
+  if (!gistId || gistId.length !== 32) {
+    console.error(`Unexpected gist ID format: ${gistId} (from ${gistUrl})`);
+    process.exit(1);
+  }
+  return gistId;
+}
+
+function downloadFromGist(gistId) {
+  const gistJson = execSync(
+    `gh api gists/${gistId}`,
+    { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 100 * 1024 * 1024 }
+  );
+  const gist = JSON.parse(gistJson);
+  const files = Object.values(gist.files);
+  if (files.length === 0) throw new Error('Gist has no files');
+  const file = files[0];
+  if (file.truncated) {
+    return execSync(
+      `curl -sL "${file.raw_url}"`,
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 100 * 1024 * 1024 }
+    );
+  }
+  return file.content;
+}
+
+function deleteGist(gistId) {
+  try {
+    execSync(`gh gist delete ${gistId} --yes`, { stdio: ['pipe', 'pipe', 'pipe'] });
+  } catch {
+    console.error('Warning: Could not delete gist. You may want to delete it manually.');
+  }
+}
+
 // --- Export ---
 
-async function doExport(sessionId, projectDir) {
+async function doExport(sessionId, projectDir, full = false) {
   const dir = resolveProjectDir(projectDir);
   const sessionFile = join(dir, `${sessionId}.jsonl`);
 
@@ -120,47 +175,55 @@ async function doExport(sessionId, projectDir) {
   const content = readFileSync(sessionFile, 'utf8');
   const filteredLines = filterMessages(content);
   const msgCount = countConversationMessages(filteredLines);
-  const payload = filteredLines.join('\n');
+  const sessionData = filteredLines.join('\n');
 
-  // Generate encryption key
+  let payload;
+  let desc;
+
+  if (full) {
+    // Tar the project directory (all files including hidden)
+    const projectCwd = resolveProjectCwd(projectDir);
+    if (!existsSync(projectCwd)) {
+      console.error(`Project directory not found: ${projectCwd}`);
+      process.exit(1);
+    }
+
+    const tarFile = join(tmpdir(), '.cc-cowork-tar-' + randomUUID() + '.tar.gz');
+    try {
+      execSync(
+        `tar -czf "${tarFile}" -C "${projectCwd}" .`,
+        { stdio: ['pipe', 'pipe', 'pipe'] }
+      );
+    } catch (err) {
+      console.error('Failed to create project archive.');
+      console.error(err.stderr || err.message);
+      process.exit(1);
+    }
+
+    const tarData = readFileSync(tarFile).toString('base64');
+    try { execSync(`rm "${tarFile}"`); } catch { /* ignore */ }
+
+    payload = JSON.stringify({
+      type: 'full',
+      session: sessionData,
+      files: tarData,
+    });
+    desc = 'cc-cowork shared session + project';
+  } else {
+    payload = sessionData;
+    desc = 'cc-cowork shared session';
+  }
+
   const key = randomBytes(KEY_BYTES);
-
-  // Encrypt
   const encrypted = encrypt(payload, key);
-
-  // Upload to GitHub Gist via gh CLI
-  // Write encrypted data to a temp file, then upload
-  const tmpFile = join(homedir(), '.claude', '.share-tmp-' + randomUUID());
-  writeFileSync(tmpFile, encrypted);
-
-  let gistUrl;
-  try {
-    gistUrl = execSync(
-      `gh gist create "${tmpFile}" --desc "cc-cowork shared session" --public=false`,
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }
-    ).trim();
-  } catch (err) {
-    // Clean up temp file
-    try { execSync(`rm "${tmpFile}"`); } catch { /* ignore */ }
-    console.error('Failed to create gist. Is `gh` CLI installed and authenticated?');
-    console.error(err.stderr || err.message);
-    process.exit(1);
-  }
-
-  // Clean up temp file
-  try { execSync(`rm "${tmpFile}"`); } catch { /* ignore */ }
-
-  // Extract gist ID from URL (last path segment)
-  const gistId = gistUrl.split('/').pop();
-
-  if (!gistId || gistId.length !== 32) {
-    console.error(`Unexpected gist ID format: ${gistId} (from ${gistUrl})`);
-    process.exit(1);
-  }
-
+  const gistId = uploadToGist(encrypted, desc);
   const hash = buildHash(gistId, key);
 
-  console.log(`Session shared! (${msgCount} messages)`);
+  if (full) {
+    console.log(`Session + project shared! (${msgCount} messages + all project files)`);
+  } else {
+    console.log(`Session shared! (${msgCount} messages)`);
+  }
   console.log(`Send this to your collaborator (one-time use, deleted after import):`);
   console.log(``);
   console.log(`npx cc-cowork ${hash}`);
@@ -171,33 +234,15 @@ async function doExport(sessionId, projectDir) {
 async function doImport(hash, projectDir) {
   const { gistId, key } = parseHash(hash);
 
-  // Download from gist - use raw_url to avoid truncation on large files
   let encrypted;
   try {
-    const gistJson = execSync(
-      `gh api gists/${gistId}`,
-      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 50 * 1024 * 1024 }
-    );
-    const gist = JSON.parse(gistJson);
-    const files = Object.values(gist.files);
-    if (files.length === 0) throw new Error('Gist has no files');
-    const file = files[0];
-    if (file.truncated) {
-      // Large file — fetch full content from raw_url
-      encrypted = execSync(
-        `curl -sL "${file.raw_url}"`,
-        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 50 * 1024 * 1024 }
-      );
-    } else {
-      encrypted = file.content;
-    }
+    encrypted = downloadFromGist(gistId);
   } catch (err) {
     console.error('Failed to download gist. It may have been deleted or the code is invalid.');
     console.error(err.stderr || err.message);
     process.exit(1);
   }
 
-  // Decrypt
   let payload;
   try {
     payload = decrypt(encrypted, key);
@@ -206,14 +251,50 @@ async function doImport(hash, projectDir) {
     process.exit(1);
   }
 
-  // Write as new session JSONL
+  // Detect payload type: full (JSON with files) or session-only (plain JSONL)
+  let sessionData;
+  let hasFiles = false;
+
+  try {
+    const parsed = JSON.parse(payload);
+    if (parsed.type === 'full' && parsed.session && parsed.files) {
+      sessionData = parsed.session;
+      hasFiles = true;
+
+      // Extract project files
+      const projectCwd = projectDir.startsWith('/') ? projectDir : resolve(projectDir);
+      mkdirSync(projectCwd, { recursive: true });
+
+      const tarFile = join(tmpdir(), '.cc-cowork-tar-' + randomUUID() + '.tar.gz');
+      writeFileSync(tarFile, Buffer.from(parsed.files, 'base64'));
+
+      try {
+        execSync(
+          `tar -xzf "${tarFile}" -C "${projectCwd}"`,
+          { stdio: ['pipe', 'pipe', 'pipe'] }
+        );
+      } catch (err) {
+        console.error('Failed to extract project files.');
+        console.error(err.stderr || err.message);
+        process.exit(1);
+      }
+
+      try { execSync(`rm "${tarFile}"`); } catch { /* ignore */ }
+    } else {
+      sessionData = payload;
+    }
+  } catch {
+    // Not JSON — it's plain JSONL (session-only)
+    sessionData = payload;
+  }
+
+  // Write session JSONL
   const newSessionId = randomUUID();
   const dir = resolveProjectDir(projectDir);
   mkdirSync(dir, { recursive: true });
   const outFile = join(dir, `${newSessionId}.jsonl`);
 
-  // Rewrite sessionId in each line to the new session ID
-  const lines = payload.split('\n').filter(Boolean);
+  const lines = sessionData.split('\n').filter(Boolean);
   const rewritten = lines.map(line => {
     try {
       const msg = JSON.parse(line);
@@ -228,37 +309,40 @@ async function doImport(hash, projectDir) {
 
   const msgCount = countConversationMessages(rewritten);
 
-  // Delete gist (one-time use)
-  try {
-    execSync(`gh gist delete ${gistId} --yes`, { stdio: ['pipe', 'pipe', 'pipe'] });
-  } catch {
-    console.error('Warning: Could not delete gist. You may want to delete it manually.');
-  }
+  deleteGist(gistId);
 
-  console.log(`Session imported! (${msgCount} messages)`);
+  if (hasFiles) {
+    console.log(`Session + project imported! (${msgCount} messages + project files)`);
+  } else {
+    console.log(`Session imported! (${msgCount} messages)`);
+  }
   console.log(`Exit and run: claude --resume ${newSessionId}`);
 }
 
 // --- Main ---
 
-const [,, command, arg1, arg2] = process.argv;
+const args = process.argv.slice(2);
+const command = args[0];
 
 if (command === 'export') {
-  if (!arg1 || !arg2) {
-    console.error('Usage: share.mjs export <sessionId> <projectDir>');
+  const full = args.includes('--full');
+  const positional = args.filter(a => a !== 'export' && a !== '--full');
+  const sessionId = positional[0];
+  const projectDir = positional[1];
+  if (!sessionId || !projectDir) {
+    console.error('Usage: share.mjs export [--full] <sessionId> <projectDir>');
     process.exit(1);
   }
-  await doExport(arg1, arg2);
+  await doExport(sessionId, projectDir, full);
 } else if (command === 'import') {
-  if (!arg1) {
-    console.error('Usage: share.mjs import <hash> [projectDir]');
-    process.exit(1);
-  }
-  if (!arg2) {
+  const positional = args.filter(a => a !== 'import');
+  const hashArg = positional[0];
+  const projectDir = positional[1];
+  if (!hashArg || !projectDir) {
     console.error('Usage: share.mjs import <hash> <projectDir>');
     process.exit(1);
   }
-  await doImport(arg1, arg2);
+  await doImport(hashArg, projectDir);
 } else {
   console.error('Usage: share.mjs <export|import> ...');
   process.exit(1);
