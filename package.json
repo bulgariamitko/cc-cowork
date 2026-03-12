@@ -4,7 +4,7 @@
   "description": "Share Claude Code sessions with collaborators via encrypted one-time codes",
   "type": "module",
   "bin": {
-    "cc-cowork": "./bin/cc-cowork.mjs"
+    "cc-cowork": "bin/cc-cowork"
   },
   "keywords": [
     "claude",
