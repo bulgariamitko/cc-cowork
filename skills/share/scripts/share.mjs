@@ -65,19 +65,10 @@ function parseHash(hash) {
   };
 }
 
-function filterMessages(jsonlContent) {
-  const lines = jsonlContent.split('\n').filter(Boolean);
-  const kept = [];
-  for (const line of lines) {
-    try {
-      const msg = JSON.parse(line);
-      if (msg.type === 'progress' || msg.type === 'file-history-snapshot') continue;
-      kept.push(line);
-    } catch {
-      // Skip malformed lines
-    }
-  }
-  return kept;
+function parseLines(jsonlContent) {
+  // Keep ALL messages to preserve the parentUuid chain.
+  // Filtering breaks the conversation tree.
+  return jsonlContent.split('\n').filter(Boolean);
 }
 
 function countConversationMessages(lines) {
@@ -196,9 +187,9 @@ async function doExport(sessionId, projectDir) {
   }
 
   const content = readFileSync(sessionFile, 'utf8');
-  const filteredLines = filterMessages(content);
-  const msgCount = countConversationMessages(filteredLines);
-  const sessionData = filteredLines.join('\n');
+  const lines = parseLines(content);
+  const msgCount = countConversationMessages(lines);
+  const sessionData = lines.join('\n');
 
   // Tar the project directory (all files including hidden)
   const projectCwd = resolveProjectCwd(projectDir);
@@ -306,11 +297,13 @@ async function doImport(hash, projectDir) {
   mkdirSync(dir, { recursive: true });
   const outFile = join(dir, `${newSessionId}.jsonl`);
 
+  const projectCwd = projectDir.startsWith('/') ? projectDir : resolve(projectDir);
   const lines = sessionData.split('\n').filter(Boolean);
   const rewritten = lines.map(line => {
     try {
       const msg = JSON.parse(line);
       msg.sessionId = newSessionId;
+      if (msg.cwd) msg.cwd = projectCwd;
       return JSON.stringify(msg);
     } catch {
       return line;
