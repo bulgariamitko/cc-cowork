@@ -46,23 +46,39 @@ The session JSONL is filtered to keep only meaningful messages (user + assistant
 
 ## Install
 
+### Option 1: Clone and run install script
+
 ```bash
 git clone https://github.com/bulgariamitko/cc-cowork.git
 cd cc-cowork
 ./install.sh
 ```
 
-This copies the skill to `~/.claude/skills/share/`. Restart Claude Code to pick up the new `/share` command.
-
-### Manual Install
-
-If you prefer not to clone:
+### Option 2: Manual install (no clone needed)
 
 ```bash
 mkdir -p ~/.claude/skills/share/scripts
 curl -sL https://raw.githubusercontent.com/bulgariamitko/cc-cowork/main/skills/share/SKILL.md -o ~/.claude/skills/share/SKILL.md
 curl -sL https://raw.githubusercontent.com/bulgariamitko/cc-cowork/main/skills/share/scripts/share.mjs -o ~/.claude/skills/share/scripts/share.mjs
 ```
+
+### What the install does
+
+Claude Code loads custom slash commands from `~/.claude/skills/`. Each skill is a folder containing a `SKILL.md` file that defines the command name, description, and instructions for Claude.
+
+The install copies two files into `~/.claude/skills/share/`:
+
+```
+~/.claude/skills/share/
+├── SKILL.md              # Defines the /share slash command
+└── scripts/
+    └── share.mjs         # Node.js script that handles encryption + Gist upload/download
+```
+
+- **`SKILL.md`** — tells Claude Code to register `/share` as a slash command. When you type `/share`, Claude reads this file and follows the instructions inside (run the Node.js script with the right arguments).
+- **`share.mjs`** — the actual logic. A single self-contained Node.js script with zero dependencies. Uses built-in `crypto` for AES-256-GCM encryption and the `gh` CLI for Gist operations.
+
+After installing, **restart Claude Code** (exit and reopen) for the `/share` command to appear.
 
 ## Usage
 
