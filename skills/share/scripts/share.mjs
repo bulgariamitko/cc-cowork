@@ -175,6 +175,32 @@ function bumpStat(field) {
   } catch { /* silent — stats are nice-to-have, never block */ }
 }
 
+const EXPIRY_HOURS = 24;
+
+function cleanupExpiredGists() {
+  // Opportunistically delete old cc-cowork gists — never block on failure
+  try {
+    const listJson = execSync(
+      'gh api gists --paginate -q ".[] | select(.description == \\"cc-cowork shared session\\") | {id: .id, created_at: .created_at}"',
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 10000 }
+    );
+    if (!listJson.trim()) return;
+
+    const now = Date.now();
+    const cutoff = EXPIRY_HOURS * 60 * 60 * 1000;
+
+    for (const line of listJson.trim().split('\n')) {
+      if (!line.trim()) continue;
+      try {
+        const { id, created_at } = JSON.parse(line);
+        if (now - new Date(created_at).getTime() > cutoff) {
+          execSync(`gh gist delete ${id} --yes`, { stdio: ['pipe', 'pipe', 'pipe'], timeout: 5000 });
+        }
+      } catch { /* skip individual gist */ }
+    }
+  } catch { /* silent — cleanup is best-effort */ }
+}
+
 // --- Export ---
 
 async function doExport(sessionId, projectDir) {
@@ -230,6 +256,7 @@ async function doExport(sessionId, projectDir) {
   console.log(`npx cc-cowork ${hash}`);
 
   bumpStat('shares');
+  cleanupExpiredGists();
 }
 
 // --- Import ---
