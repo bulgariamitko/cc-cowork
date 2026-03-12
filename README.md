@@ -10,8 +10,9 @@ Share Claude Code sessions with collaborators using a single `/share` command. S
 ```
 ```
 Session shared! (42 messages)
-Code: cCw_a1b2c3d4e5f6...
-Share this code. It's one-time use and will be deleted after import.
+Send this to your collaborator (one-time use, deleted after import):
+
+/share cCw_a1b2c3d4e5f6...
 ```
 
 **User B** imports the session:
@@ -73,7 +74,7 @@ Inside any Claude Code conversation, type:
 /share
 ```
 
-You'll get a code like `cCw_PcP4dkeg8SyeruNrsFwmWuI0jOkTBFUh_RjRQAlZ61tlQeZyNC4B2tUf2X0E4cdG`. Send this to your collaborator via Slack, email, whatever.
+You'll get a ready-to-paste command like `/share cCw_PcP4dk...`. Send the whole line to your collaborator — they paste it directly into Claude Code.
 
 ### Import a shared session
 

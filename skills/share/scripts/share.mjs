@@ -154,8 +154,9 @@ async function doExport(sessionId, projectDir) {
   const hash = buildHash(gistId, key);
 
   console.log(`Session shared! (${msgCount} messages)`);
-  console.log(`Code: ${hash}`);
-  console.log(`Share this code. It's one-time use and will be deleted after import.`);
+  console.log(`Send this to your collaborator (one-time use, deleted after import):`);
+  console.log(``);
+  console.log(`/share ${hash}`);
 }
 
 // --- Import ---
@@ -163,7 +164,7 @@ async function doExport(sessionId, projectDir) {
 async function doImport(hash, projectDir) {
   const { gistId, key } = parseHash(hash);
 
-  // Download from gist using gh api to get raw file content
+  // Download from gist - use raw_url to avoid truncation on large files
   let encrypted;
   try {
     const gistJson = execSync(
@@ -173,7 +174,16 @@ async function doImport(hash, projectDir) {
     const gist = JSON.parse(gistJson);
     const files = Object.values(gist.files);
     if (files.length === 0) throw new Error('Gist has no files');
-    encrypted = files[0].content;
+    const file = files[0];
+    if (file.truncated) {
+      // Large file — fetch full content from raw_url
+      encrypted = execSync(
+        `curl -sL "${file.raw_url}"`,
+        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 50 * 1024 * 1024 }
+      );
+    } else {
+      encrypted = file.content;
+    }
   } catch (err) {
     console.error('Failed to download gist. It may have been deleted or the code is invalid.');
     console.error(err.stderr || err.message);
