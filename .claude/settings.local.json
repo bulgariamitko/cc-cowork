@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(node /Users/dimitarklaturov/Library/CloudStorage/Dropbox/apps/cc-cowork/bin/cc-cowork --install 2>&1)",
-      "Bash(git add:*)"
-    ]
-  }
-}
