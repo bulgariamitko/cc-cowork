@@ -17,7 +17,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bulgariamitko/cc-cowork.git"
+    "url": "git+https://github.com/bulgariamitko/claude-code-cowork.git"
   },
   "engines": {
     "node": ">=18"
